@@ -362,6 +362,65 @@
         "type": "function"
     },
     {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "getUserPurchases",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "totalClaimable",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalPurchases",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalInvest",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalClaimed",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "totalTokens",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "usdtPaid",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "withdrawnTokens",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "purchaseTime",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "lastClaimPeriod",
+                "type": "uint256[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
         "inputs": [],
         "name": "owner",
         "outputs": [

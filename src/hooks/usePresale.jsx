@@ -55,12 +55,82 @@ function usePresale() {
         }
     };
 
-    
+    // ✅ Get WFE amount for USDT
+    const getUSDTToWFE = async (usdtAmount) => {
+        try {
+            const wfeAmount = await readContract(configRead, {
+                abi: presaleAbi,
+                address: blockConfig[chainId].PRESALE_ADDRESS,
+                functionName: "getUSDTToWFE",
+                args: [usdtAmount],
+            });
+            return wfeAmount;
+        } catch (error) {
+            console.error("Error fetching WFE amount:", error);
+            return 0;
+        }
+    };
+
+    // ✅ Buy tokens
+    const buyToken = async (usdtAmount) => {
+        try {
+            const hash = await writeContractAsync({
+                abi: presaleAbi,
+                address: blockConfig[chainId].PRESALE_ADDRESS,
+                functionName: "buyToken",
+                args: [usdtAmount],
+            });
+
+            await waitForTransactionReceipt(configRead, { hash });
+            return hash;
+        } catch (error) {
+            console.error("Buy token failed:", error);
+            throw error;
+        }
+    };
+
+    // ✅ Claim purchased tokens
+    const claimToken = async () => {
+        try {
+            const hash = await writeContractAsync({
+                abi: presaleAbi,
+                address: blockConfig[chainId].PRESALE_ADDRESS,
+                functionName: "claimToken",
+                args: [],
+            });
+
+            await waitForTransactionReceipt(configRead, { hash });
+            return hash;
+        } catch (error) {
+            console.error("Claim token failed:", error);
+            throw error;
+        }
+    };
+
+    // ✅ Get user purchase info
+    const getUserPurchases = async () => {
+        try {
+            const purchases = await readContract(configRead, {
+                abi: presaleAbi,
+                address: blockConfig[chainId].PRESALE_ADDRESS,
+                functionName: "getUserPurchases",
+                args: [address],
+            });
+            return purchases;
+        } catch (error) {
+            console.error("Error fetching user purchases:", error);
+            return null;
+        }
+    };
 
     return {
         checkTokenBalance,
         checkAllowance,
-        setApproval
+        setApproval,
+        getUSDTToWFE,
+        buyToken,
+        claimToken,
+        getUserPurchases
     };
 }
 
