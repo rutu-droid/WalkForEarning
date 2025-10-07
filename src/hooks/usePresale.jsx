@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { blockConfig } from "../config/BlockChainConfig";
 import { configRead } from "../utils/RainbowKitConfig";
 
-// const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID);
+const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID);
 
 function usePresale() {
     const { address, chainId } = useAccount();
@@ -14,15 +14,13 @@ function usePresale() {
         try {
             const tokenBalance = await readContract(configRead, {
                 abi: erc20Abi,
-                address: blockConfig[chainId].USDT_TOKEN_ADDRESS,
+                address: blockConfig[chainId || CHAIN_ID].USDT_TOKEN_ADDRESS,
                 functionName: "balanceOf",
                 args: [address],
             });
-            // console.log(balance);
 
-            setbalance(tokenBalance);
+            return tokenBalance;
         } catch (error) {
-            return 0;
         }
     };
 
@@ -30,9 +28,9 @@ function usePresale() {
         try {
             const allowance = await readContract(configRead, {
                 abi: erc20Abi,
-                address: blockConfig[chainId].USDT_TOKEN_ADDRESS,
+                address: blockConfig[chainId || CHAIN_ID].USDT_TOKEN_ADDRESS,
                 functionName: "allowance",
-                args: [address, blockConfig[chainId].PRESALE_ADDRESS],
+                args: [address, blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS],
             });
             return allowance;
         } catch (error) {
@@ -44,9 +42,9 @@ function usePresale() {
         try {
             const approval = await writeContractAsync({
                 abi: erc20Abi,
-                address: blockConfig[chainId].USDT_TOKEN_ADDRESS,
+                address: blockConfig[chainId || CHAIN_ID].USDT_TOKEN_ADDRESS,
                 functionName: "approve",
-                args: [blockConfig[chainId].PRESALE_ADDRESS, amount],
+                args: [blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS, amount],
             });
             await waitForTransaction(approval, 100);
             return approval;
@@ -59,29 +57,33 @@ function usePresale() {
     const getUSDTToWFE = async (usdtAmount) => {
         try {
             const wfeAmount = await readContract(configRead, {
-                abi: presaleAbi,
-                address: blockConfig[chainId].PRESALE_ADDRESS,
+                abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
+                address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
                 functionName: "getUSDTToWFE",
-                args: [usdtAmount],
+                args: [usdtAmount], // make sure it's BigInt
             });
+
+            console.log("✅ WFE Amount Returned:", wfeAmount);
             return wfeAmount;
         } catch (error) {
-            console.error("Error fetching WFE amount:", error);
-            return 0;
+            console.error("🔥 getUSDTToWFE Error:", error);
+            return 0n;
         }
-    };
+
+    }
+
 
     // ✅ Buy tokens
     const buyToken = async (usdtAmount) => {
         try {
             const hash = await writeContractAsync({
-                abi: presaleAbi,
-                address: blockConfig[chainId].PRESALE_ADDRESS,
+                abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
+                address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
                 functionName: "buyToken",
                 args: [usdtAmount],
             });
 
-            await waitForTransactionReceipt(configRead, { hash });
+            
             return hash;
         } catch (error) {
             console.error("Buy token failed:", error);
@@ -93,8 +95,8 @@ function usePresale() {
     const claimToken = async () => {
         try {
             const hash = await writeContractAsync({
-                abi: presaleAbi,
-                address: blockConfig[chainId].PRESALE_ADDRESS,
+                abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
+                address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
                 functionName: "claimToken",
                 args: [],
             });
@@ -111,8 +113,8 @@ function usePresale() {
     const getUserPurchases = async () => {
         try {
             const purchases = await readContract(configRead, {
-                abi: presaleAbi,
-                address: blockConfig[chainId].PRESALE_ADDRESS,
+                abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
+                address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
                 functionName: "getUserPurchases",
                 args: [address],
             });
@@ -134,4 +136,4 @@ function usePresale() {
     };
 }
 
-export default usePresale();
+export default usePresale;
