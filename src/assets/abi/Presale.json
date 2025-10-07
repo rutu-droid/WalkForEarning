@@ -415,6 +415,11 @@
                 "internalType": "uint256[]",
                 "name": "lastClaimPeriod",
                 "type": "uint256[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "claimableAmounts",
+                "type": "uint256[]"
             }
         ],
         "stateMutability": "view",

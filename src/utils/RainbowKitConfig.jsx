@@ -20,7 +20,7 @@ const testNetworks = [bscTestnet];
 const mainNetworks = [bsc];
 
 const transportstest = {
-  [bscTestnet.id]:window.ethereum  ? custom(window.ethereum) : http(),
+  [bscTestnet.id]: http("https://bsc-testnet-rpc.publicnode.com"),
 };
 const transportMain = {
   [bsc.id]: window.ethereum ?  custom(window.ethereum) : http(),

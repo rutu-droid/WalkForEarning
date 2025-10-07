@@ -1,33 +1,38 @@
 import { useAccount, useWriteContract } from "wagmi";
 import { readContract } from "@wagmi/core";
-import { useEffect, useState } from "react";
+import useWaitForTransaction from "../hooks/useWaitForTransaction";
 import { blockConfig } from "../config/BlockChainConfig";
 import { configRead } from "../utils/RainbowKitConfig";
+import { erc20Abi } from "viem";
 
 const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID);
 
 function usePresale() {
     const { address, chainId } = useAccount();
     const { writeContractAsync } = useWriteContract();
+    const { waitForTransaction } = useWaitForTransaction();
 
     const checkTokenBalance = async () => {
         try {
+            debugger
             const tokenBalance = await readContract(configRead, {
                 abi: erc20Abi,
                 address: blockConfig[chainId || CHAIN_ID].USDT_TOKEN_ADDRESS,
                 functionName: "balanceOf",
                 args: [address],
             });
-
+            console.log(tokenBalance);
             return tokenBalance;
         } catch (error) {
+            console.log(error);
+            
         }
     };
 
     const checkAllowance = async () => {
         try {
             const allowance = await readContract(configRead, {
-                abi: erc20Abi,
+                abi:  erc20Abi,
                 address: blockConfig[chainId || CHAIN_ID].USDT_TOKEN_ADDRESS,
                 functionName: "allowance",
                 args: [address, blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS],
@@ -41,7 +46,7 @@ function usePresale() {
     const setApproval = async (amount) => {
         try {
             const approval = await writeContractAsync({
-                abi: erc20Abi,
+                abi:  erc20Abi,
                 address: blockConfig[chainId || CHAIN_ID].USDT_TOKEN_ADDRESS,
                 functionName: "approve",
                 args: [blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS, amount],
@@ -79,11 +84,11 @@ function usePresale() {
             const hash = await writeContractAsync({
                 abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
                 address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
-                functionName: "buyToken",
+                functionName: "buyTokens",
                 args: [usdtAmount],
             });
 
-            
+            await waitForTransaction(hash, 100);
             return hash;
         } catch (error) {
             console.error("Buy token failed:", error);
@@ -92,16 +97,16 @@ function usePresale() {
     };
 
     // ✅ Claim purchased tokens
-    const claimToken = async () => {
+    const claimToken = async (purchaseId) => {
         try {
             const hash = await writeContractAsync({
                 abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
                 address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
-                functionName: "claimToken",
-                args: [],
+                functionName: "claimTokens",
+                args: [purchaseId],
             });
 
-            await waitForTransactionReceipt(configRead, { hash });
+            await waitForTransaction(hash, 100);
             return hash;
         } catch (error) {
             console.error("Claim token failed:", error);
@@ -125,6 +130,21 @@ function usePresale() {
         }
     };
 
+     const totalUsers = async () => {
+        try {
+            const purchases = await readContract(configRead, {
+                abi: blockConfig[chainId || CHAIN_ID].PRESALE_ABI,
+                address: blockConfig[chainId || CHAIN_ID].PRESALE_ADDRESS,
+                functionName: "totalUsers",
+                args: [],
+            });
+            return purchases;
+        } catch (error) {
+            console.error("Error fetching user purchases:", error);
+            return null;
+        }
+    };
+
     return {
         checkTokenBalance,
         checkAllowance,
@@ -132,7 +152,8 @@ function usePresale() {
         getUSDTToWFE,
         buyToken,
         claimToken,
-        getUserPurchases
+        getUserPurchases,
+        totalUsers
     };
 }
 

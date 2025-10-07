@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import CustomConnectButton from "../components/button/CustomConnectButton";
 import { useAccount } from 'wagmi';
-import { erc20Abi, formatUnits, parseUnits, isAddress } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import usePresale from "../hooks/usePresale";
 import toast from "react-hot-toast";
 
@@ -16,9 +16,19 @@ export const Dashboard = () => {
     getUSDTToWFE,
     buyToken,
     claimToken,
-    getUserPurchases } = usePresale();
+    getUserPurchases,
+    totalUsers
+  } = usePresale();
   const [loading, setLoading] = useState(false);
   const [transactionMessage, setTransactionMessage] = useState("Please wait...");
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
+  const [totals, setTotals] = useState({
+    totalDeposits: 0,
+    totalWithdrawn: 0,
+    totalWFE: 0,
+  });
+  const [liveUsers, setLiveUsers] = useState(0);
+
 
 
   useEffect(() => {
@@ -41,11 +51,127 @@ export const Dashboard = () => {
     fetchConversion();
   }, [usdtAmount]);
 
-  const tableData = [
-    { sr: 1, deposit: "200.00 USDT", withdraw: "200.00 USDT", released: "200.00 USDT", purchaseDate: "200.00 USDT", claim: "200.00 USDT" },
-    { sr: 2, deposit: "200.00 USDT", withdraw: "200.00 USDT", released: "200.00 USDT", purchaseDate: "200.00 USDT", claim: "200.00 USDT" },
-    { sr: 3, deposit: "200.00 USDT", withdraw: "200.00 USDT", released: "200.00 USDT", purchaseDate: "200.00 USDT", claim: "200.00 USDT" },
-  ];
+  // 🟩 Fetch purchase data when wallet connects
+  useEffect(() => {
+    fetchData();
+  }, [isConnected, address]);
+
+  useEffect(() => {
+  const fetchLiveUsers = async () => {
+    try {
+      const users = await totalUsers(); // assuming totalUsers() returns a number
+      setLiveUsers(Number(users));
+    } catch (err) {
+      console.error("Error fetching total users:", err);
+    }
+  };
+
+  fetchLiveUsers();
+  const interval = setInterval(fetchLiveUsers, 3000);
+
+  // Cleanup interval on component unmount
+  return () => clearInterval(interval);
+}, []);
+
+
+  const fetchData = async () => {
+    try {
+      if (!isConnected || !address) return;
+
+      const data = await getUserPurchases(address);
+      console.log("✅ Raw User Purchase Data:", data);
+
+      // 🧩 Extract arrays safely based on return structure
+      const usdtPaid = data?.usdtPaid || data?.[5] || [];
+      const withdrawnTokens = data?.withdrawnTokens || data?.[6] || [];
+      const totalTokens = data?.totalTokens || data?.[4] || [];
+      const purchaseTime = data?.purchaseTime || data?.[7] || [];
+      const claimableAmounts = data?.claimableAmounts || data?.[9] || []; // 👈 new array for released column
+
+      // 🟦 Prepare table data
+      const formattedData = usdtPaid.map((paid, index) => ({
+        sr: index + 1,
+        deposit: Number(paid || 0) / 10 ** usdtDecimal,
+        totalTokens: Number(totalTokens[index] || 0) / 1e18,
+        withdraw: Number(withdrawnTokens[index] || 0) / 1e18, // WFE (18 decimals)
+        release: Number(claimableAmounts[index] || 0) / 1e18, // 👈 use claimableAmounts per purchase
+        purchaseDate: new Date(
+          Number(purchaseTime[index] || 0) * 1000
+        ).toLocaleDateString(),
+      }));
+
+      setPurchaseHistory(formattedData);
+      // 🟩 Calculate totals
+      const totalDeposits = usdtPaid.reduce((acc, val) => acc + Number(val || 0) / 10 ** usdtDecimal, 0);
+      const totalWithdrawn = withdrawnTokens.reduce((acc, val) => acc + Number(val || 0) / 1e18, 0);
+      const totalWFE = claimableAmounts.reduce((acc, val) => acc + Number(val || 0) / 1e18, 0);
+
+      setTotals({
+        totalDeposits,
+        totalWithdrawn,
+        totalWFE,
+      });
+    } catch (error) {
+      console.error("❌ Error fetching purchases:", error);
+      toast.error("Failed to load transaction history");
+    }
+  };
+
+  // 🟧 Claim handler
+  const handleClaim = async (index) => {
+    try {
+      toast.loading("Claiming tokens...");
+      const tx = await claimToken(index);
+      toast.success("Claim successful!");
+      fetchData();
+    } catch (err) {
+      console.error("❌ Claim error:", err);
+      toast.error("Claim failed");
+    } finally {
+      toast.dismiss();
+    }
+  };
+
+  const handleBuy = async () => {
+    try {
+      if (!isConnected) {
+        toast.error("Please connect your wallet first!");
+        return;
+      }
+
+      if (!usdtAmount || isNaN(usdtAmount) || Number(usdtAmount) <= 0) {
+        toast.error("Enter a valid USDT amount!");
+        return;
+      }
+      setLoading(true);
+      const usdtWei = parseUnits(usdtAmount, usdtDecimal);
+      console.log("**", usdtWei);
+      debugger
+      const balance = await checkTokenBalance();
+      const userBalance = BigInt(balance);
+      console.log(userBalance);
+      if (userBalance < usdtWei) {
+        toast.error("Insufficient USDT balance!");
+        setLoading(false);
+        return;
+      }
+      const allowance = await checkAllowance(address);
+      if (BigInt(allowance) < usdtWei) {
+        toast.loading("Approving USDT...", { id: "approval" });
+        const approvalTx = await setApproval(usdtWei);
+        toast.success("Approval successful!", { id: "approval" });
+      }
+      toast.loading("Buying WFE tokens...", { id: "buy" });
+      const buyTx = await buyToken(usdtWei);
+      toast.success("Purchase successful!", { id: "buy" });
+      fetchData();
+    } catch (err) {
+      toast.error("Transaction failed. Check console for details.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <div className="flex flex-col items-center min-h-screen w-full 
@@ -95,8 +221,8 @@ export const Dashboard = () => {
                 <path d="M4 12H20C21.1 12 22 12.9 22 14V19C22 20.1 21.1 21 20 21H4C2.9 21 2 20.1 2 19V5C2 3.9 2.9 3 4 3H20C21.1 3 22 3.9 22 5V8H20C18.9 8 18 8.9 18 10V12H4V10C4 8.9 4.9 8 6 8H18V5H4V12Z" stroke="#8A48F3" strokeWidth="2" />
               </svg>
             </div>
-            <p className="text-lg sm:text-xl font-medium">200.00 USDT</p>
-            <p className="text-xs sm:text-sm text-[rgba(255,255,255,0.6)]">Latest Deposit</p>
+            <p className="text-lg sm:text-xl font-medium">{totals.totalDeposits.toFixed(2)} USDT</p>
+            <p className="text-xs sm:text-sm text-[rgba(255,255,255,0.6)]">Total Deposit</p>
           </div>
 
           <div className="flex flex-col items-start gap-3 sm:gap-4 p-4 sm:p-6 rounded-[20px] 
@@ -107,7 +233,7 @@ export const Dashboard = () => {
                 <path d="M12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2ZM16.2 16.2L12 10.7V6H14V10.3L17.8 15.2L16.2 16.2Z" fill="#8A48F3" />
               </svg>
             </div>
-            <p className="text-lg sm:text-xl font-medium">169240</p>
+            <p className="text-lg sm:text-xl font-medium">{liveUsers}</p>
             <p className="text-xs sm:text-sm text-[rgba(255,255,255,0.6)]">Live Shares</p>
           </div>
 
@@ -119,8 +245,8 @@ export const Dashboard = () => {
                 <path d="M4 12H20C21.1 12 22 12.9 22 14V19C22 20.1 21.1 21 20 21H4C2.9 21 2 20.1 2 19V5C2 3.9 2.9 3 4 3H20C21.1 3 22 3.9 22 5V8H20C18.9 8 18 8.9 18 10V12H4V10C4 8.9 4.9 8 6 8H18V5H4V12Z" stroke="#8A48F3" strokeWidth="2" />
               </svg>
             </div>
-            <p className="text-lg sm:text-xl font-medium">0.00 USDT</p>
-            <p className="text-xs sm:text-sm text-[rgba(255,255,255,0.6)]">My Deposit</p>
+            <p className="text-lg sm:text-xl font-medium">{totals.totalWFE.toFixed(2)} WFE</p>
+            <p className="text-xs sm:text-sm text-[rgba(255,255,255,0.6)]">Total Claimable</p>
           </div>
 
           <div className="flex flex-col items-start gap-3 sm:gap-4 p-4 sm:p-6 rounded-[20px] 
@@ -131,7 +257,7 @@ export const Dashboard = () => {
                 <path d="M4 12H20C21.1 12 22 12.9 22 14V19C22 20.1 21.1 21 20 21H4C2.9 21 2 20.1 2 19V5C2 3.9 2.9 3 4 3H20C21.1 3 22 3.9 22 5V8H20C18.9 8 18 8.9 18 10V12H4V10C4 8.9 4.9 8 6 8H18V5H4V12ZM16 16H8V14H16V16Z" fill="#8A48F3" />
               </svg>
             </div>
-            <p className="text-lg sm:text-xl font-medium">0.00 USDT</p>
+            <p className="text-lg sm:text-xl font-medium">{totals.totalWithdrawn.toFixed(2)} USDT</p>
             <p className="text-xs sm:text-sm text-[rgba(255,255,255,0.6)]">My Withdrawn</p>
           </div>
         </div>
@@ -180,6 +306,7 @@ export const Dashboard = () => {
                 <tr>
                   <th className="p-2 sm:p-4">Sr. No</th>
                   <th className="p-2 sm:p-4">Deposit</th>
+                  <th className="p-2 sm:p-4">Total WFE</th>
                   <th className="p-2 sm:p-4">Withdraw</th>
                   <th className="p-2 sm:p-4">Released</th>
                   <th className="p-2 sm:p-4">Purchase Date</th>
@@ -187,16 +314,35 @@ export const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {tableData.map((row, index) => (
-                  <tr key={index} className="border-b border-[rgba(255,255,255,0.1)] last:border-b-0 hover:bg-[rgba(255,255,255,0.05)] transition-colors">
-                    <td className="p-2 sm:p-4">{row.sr}</td>
-                    <td className="p-2 sm:p-4">{row.deposit}</td>
-                    <td className="p-2 sm:p-4">{row.withdraw}</td>
-                    <td className="p-2 sm:p-4">{row.released}</td>
-                    <td className="p-2 sm:p-4">{row.purchaseDate}</td>
-                    <td className="p-2 sm:p-4">{row.claim}</td>
+                {purchaseHistory.length > 0 ? (
+                  purchaseHistory.map((item, index) => (
+                    <tr key={item.sr} className="border-t border-gray-700">
+                      <td className="px-4 py-2">{item.sr}</td>
+                      <td className="px-4 py-2">{item.deposit}</td>
+                      <td className="px-4 py-2">{item.totalTokens}</td>
+                      <td className="px-4 py-2">{item.withdraw}</td>
+                      <td className="px-4 py-2">{item.release}</td>
+                      <td className="px-4 py-2">{item.purchaseDate}</td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleClaim(index)}
+                          className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium px-3 py-1 rounded-lg transition"
+                        >
+                          Claim
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="text-center py-4 text-gray-400 italic"
+                    >
+                      No transactions found
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
